@@ -69,8 +69,8 @@ static const int   ADAPTIVE_BLOCK   = 35;     // must be odd
 static const int   THRESHOLD_BIAS   = 6;      // below mean → dark bar
 static const int   CONFIRM_HITS     = 2;      // same code seen N times
 static const int   MAX_RUNS         = 1024;
-static const float TOLERANCE        = 1.3f;   // pattern match tolerance (units)
-static const int   MIN_UNIT_PX      = 2;      // minimum bar width in pixels
+static const float TOLERANCE        = 1.0f;   // pattern match tolerance (units)
+static const int   MIN_UNIT_PX      = 3;      // minimum bar width in pixels
 static const int   MAX_UNIT_PX      = 60;     // maximum bar width in pixels
 
 // ── EAN/UPC TABLES ───────────────────────────────────────────────────────────
@@ -304,7 +304,7 @@ static inline bool guard_ok(int a, int b, int c) {
     float avg = (a + b + c) / 3.0f;
     if (avg < MIN_UNIT_PX || avg > MAX_UNIT_PX) return false;
     float tol = 0.45f * avg;
-    return fabsf(a-avg) < tol && fabsf(b-avg) < tol && fabsf(c-avg) < tol;
+    return fabsf(a-avg)/avg < 0.30f && fabsf(b-avg)/avg < 0.30f && fabsf(c-avg)/avg < 0.30f;
 }
 
 // ── STEP 9: DIGIT DECODERS ───────────────────────────────────────────────────

@@ -495,19 +495,26 @@ static bool scan_row(
     int runs[MAX_RUNS];
     bool start_dark;
     int n = extract_runs(binary, w, y*w, runs, &start_dark);
-    if (n < 30) return false;
+    if (n < 55) return false; // UPC-A needs at least 59 runs — filter short rows
 
-    // Slide through runs looking for start guard
+    // First pass: try EAN-13 / UPC-A only
+    for (int i = 0; i < n-55; i++) {
+        bool is_dark = ((i % 2 == 0) == start_dark);
+        if (!is_dark) continue;
+        if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
+        float unit = estimate_unit(runs, n, i);
+        // Reject if unit is too small (barcode too far away) or too large
+        if (unit < 1.5f || unit > 80.0f) continue;
+        if (decode_ean(runs, n, i, unit, out)) return true;
+    }
+
+    // Second pass: try EAN-8 only if no EAN-13/UPC-A found
     for (int i = 0; i < n-30; i++) {
         bool is_dark = ((i % 2 == 0) == start_dark);
         if (!is_dark) continue;
-
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
         float unit = estimate_unit(runs, n, i);
-
-        // Try EAN-13 / UPC-A first (most common)
-        if (decode_ean(runs, n, i, unit, out)) return true;
-        // Then EAN-8
+        if (unit < 1.5f || unit > 80.0f) continue;
         if (decode_ean8(runs, n, i, unit, out)) return true;
     }
     return false;

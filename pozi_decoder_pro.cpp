@@ -283,14 +283,25 @@ static int extract_runs(
 // Estimate the "unit" (1-bar-width) from the start guard
 // Use the start guard (3 equal bars) to calibrate
 
-static float estimate_unit(const int* runs, int guard_idx) {
-    // Use median of guard bars — more robust than average
-    int a = runs[guard_idx], b = runs[guard_idx+1], c = runs[guard_idx+2];
-    // Sort 3 values and take middle
-    if (a > b) { int t=a; a=b; b=t; }
-    if (b > c) { int t=b; b=c; c=t; }
-    if (a > b) { int t=a; a=b; b=t; }
-    return (float)b; // median
+static float estimate_unit(const int* runs, int n, int guard_idx) {
+    // Primary: average of 3 guard bars
+    float avg = (runs[guard_idx] + runs[guard_idx+1] + runs[guard_idx+2]) / 3.0f;
+
+    // Secondary: try to use full barcode width for better accuracy
+    // EAN-13 = 95 modules total, UPC-A = 95 modules
+    // Structure: 3 (start) + 42 (left 6 digits) + 5 (middle) + 42 (right 6 digits) + 3 (end)
+    // Count runs from guard to end guard if possible
+    int total_runs = 3 + 24 + 5 + 24 + 3; // = 59 runs for EAN-13
+    if (guard_idx + total_runs < n) {
+        int total_px = 0;
+        for (int i = guard_idx; i < guard_idx + total_runs; i++) {
+            total_px += runs[i];
+        }
+        float unit_from_total = total_px / 95.0f;
+        // Use weighted average of both estimates
+        return (avg * 0.4f) + (unit_from_total * 0.6f);
+    }
+    return avg;
 }
 
 // ── STEP 8: PATTERN MATCHING ─────────────────────────────────────────────────
@@ -492,7 +503,7 @@ static bool scan_row(
         if (!is_dark) continue;
 
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
-        float unit = estimate_unit(runs, i);
+        float unit = estimate_unit(runs, n, i);
 
         // Try EAN-13 / UPC-A first (most common)
         if (decode_ean(runs, n, i, unit, out)) return true;
@@ -539,7 +550,7 @@ static bool scan_diagonal(
         bool is_dark = ((i%2==0) == start_dark);
         if (!is_dark) continue;
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
-        float unit = estimate_unit(runs, i);
+        float unit = estimate_unit(runs, n, i);
         if (decode_ean(runs, n, i, unit, out)) return true;
     }
     return false;

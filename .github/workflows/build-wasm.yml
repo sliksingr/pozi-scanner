@@ -26,7 +26,7 @@ jobs:
             -O3 \
             -msimd128 \
             -s WASM=1 \
-            -s EXPORTED_FUNCTIONS='["_pozi_alloc","_pozi_free","_pozi_decode_pro"]' \
+            -s EXPORTED_FUNCTIONS='["_pozi_alloc","_pozi_free","_pozi_decode_pro","_pozi_decode_debug"]' \
             -s EXPORTED_RUNTIME_METHODS='["cwrap","HEAPU8","HEAP32"]' \
             -s ALLOW_MEMORY_GROWTH=1 \
             -s MODULARIZE=1 \

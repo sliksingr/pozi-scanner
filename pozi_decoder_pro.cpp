@@ -49,6 +49,7 @@
 #include <cmath>
 #include <algorithm>
 #include <climits>
+#include <cstdio>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -663,6 +664,87 @@ EXPORT int pozi_decode_pro(
     }
 
     free(gray); free(blurred); free(sharp); free(integ); free(binary);
+    return ret;
+}
+
+/**
+ * Debug decode — returns JSON string with internal state
+ * Call pozi_decode_debug() to get insight into what the decoder sees
+ */
+EXPORT int pozi_decode_debug(
+    const uint8_t* rgba,
+    int w, int h,
+    char* out_code,
+    int*  out_format,
+    char* out_debug,   // buffer for debug JSON, at least 256 bytes
+    int   debug_size)
+{
+    *out_format = 0;
+    out_debug[0] = '\0';
+
+    int pixels = w * h;
+    uint8_t* gray    = (uint8_t*)malloc(pixels);
+    uint8_t* blurred = (uint8_t*)malloc(pixels);
+    uint8_t* sharp   = (uint8_t*)malloc(pixels);
+    int32_t* integ   = (int32_t*)malloc((w+1)*(h+1)*sizeof(int32_t));
+    uint8_t* binary  = (uint8_t*)malloc(pixels);
+
+    if (!gray||!blurred||!sharp||!integ||!binary) {
+        free(gray);free(blurred);free(sharp);free(integ);free(binary);
+        return 0;
+    }
+
+    to_gray(rgba, gray, pixels);
+    blur_3x3(gray, blurred, w, h);
+    unsharp_mask(gray, blurred, sharp, pixels, 0.8f);
+    build_integral(sharp, integ, w, h);
+    adaptive_threshold(sharp, integ, binary, w, h);
+
+    int roi_top    = (int)(h * ROI_TOP);
+    int roi_bottom = (int)(h * ROI_BOTTOM);
+    int roi_h      = roi_bottom - roi_top;
+
+    // Count total runs across all rows for debug
+    int total_runs_found = 0;
+    int best_run_count   = 0;
+    int rows_tried       = 0;
+
+    ScanResult result;
+    result.valid = false;
+
+    for (int row = 0; row < SCAN_ROWS_H && !result.valid; row++) {
+        float t = 0.25f + ((row % (SCAN_ROWS_H/2)) / (float)(SCAN_ROWS_H/2)) * 0.50f;
+        int row_y = roi_top + (int)(t * roi_h);
+        if (row_y >= h) continue;
+
+        // Count runs for debug
+        int runs[MAX_RUNS];
+        bool sd;
+        int n = extract_runs(binary, w, row_y, runs, &sd);
+        total_runs_found += n;
+        if (n > best_run_count) best_run_count = n;
+        rows_tried++;
+
+        scan_row(binary, w, row_y, &result);
+    }
+
+    // Build debug string
+    snprintf(out_debug, debug_size,
+        "w:%d h:%d rows:%d runs:%d found:%s code:%s",
+        w, h, rows_tried, best_run_count,
+        result.valid ? "yes" : "no",
+        result.valid ? result.code : "none"
+    );
+
+    int ret = 0;
+    if (result.valid) {
+        strncpy(out_code, result.code, 15);
+        out_code[15] = '\0';
+        *out_format = result.format;
+        ret = result.length;
+    }
+
+    free(gray);free(blurred);free(sharp);free(integ);free(binary);
     return ret;
 }
 

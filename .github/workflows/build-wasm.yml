@@ -1,0 +1,44 @@
+name: Compile POZi Scanner to WebAssembly
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Verify Emscripten
+        run: emcc --version
+
+      - name: Compile C++ to WebAssembly
+        run: |
+          emcc pozi_decoder_pro.cpp \
+            -O3 \
+            -msimd128 \
+            -s WASM=1 \
+            -s EXPORTED_FUNCTIONS='["_pozi_alloc","_pozi_free","_pozi_decode_pro"]' \
+            -s EXPORTED_RUNTIME_METHODS='["cwrap","HEAPU8","HEAP32"]' \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME='PoziWasm' \
+            -s ENVIRONMENT='web' \
+            -o pozi_decoder.js
+
+      - name: Upload compiled files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pozi-wasm-output
+          path: |
+            pozi_decoder.js
+            pozi_decoder.wasm
+          retention-days: 30

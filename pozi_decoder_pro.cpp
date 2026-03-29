@@ -284,8 +284,13 @@ static int extract_runs(
 // Use the start guard (3 equal bars) to calibrate
 
 static float estimate_unit(const int* runs, int guard_idx) {
-    float avg = (runs[guard_idx] + runs[guard_idx+1] + runs[guard_idx+2]) / 3.0f;
-    return avg;
+    // Use median of guard bars — more robust than average
+    int a = runs[guard_idx], b = runs[guard_idx+1], c = runs[guard_idx+2];
+    // Sort 3 values and take middle
+    if (a > b) { int t=a; a=b; b=t; }
+    if (b > c) { int t=b; b=c; c=t; }
+    if (a > b) { int t=a; a=b; b=t; }
+    return (float)b; // median
 }
 
 // ── STEP 8: PATTERN MATCHING ─────────────────────────────────────────────────
@@ -304,7 +309,7 @@ static inline bool guard_ok(int a, int b, int c) {
     float avg = (a + b + c) / 3.0f;
     if (avg < MIN_UNIT_PX || avg > MAX_UNIT_PX) return false;
     float tol = 0.45f * avg;
-    return fabsf(a-avg)/avg < 0.30f && fabsf(b-avg)/avg < 0.30f && fabsf(c-avg)/avg < 0.30f;
+    return fabsf(a-avg)/avg < 0.25f && fabsf(b-avg)/avg < 0.25f && fabsf(c-avg)/avg < 0.25f;
 }
 
 // ── STEP 9: DIGIT DECODERS ───────────────────────────────────────────────────
@@ -375,6 +380,14 @@ static bool decode_ean(
         i += 4;
     }
 
+    // Verify left side total width is reasonable (6 digits x 7 units = 42)
+    int left_total = 0;
+    for (int d = g+3; d < g+3+24 && d < n; d++) {
+        left_total += runs[d];
+    }
+    float expected_left = unit * 42.0f;
+    if (fabsf((float)left_total - expected_left) / expected_left > 0.25f) return false;
+
     // Middle guard: 5 bars (light dark light dark light)
     if (i+4 >= n) return false;
     i += 5;
@@ -392,6 +405,7 @@ static bool decode_ean(
     if (i+2 >= n) return false;
 
     // Determine format from parity
+    // Hard checksum gate — no result without valid checksum
     if (parity_mask == 0) {
         // UPC-A
         if (!ck_upca(digits)) return false;

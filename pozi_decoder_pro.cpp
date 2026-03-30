@@ -70,7 +70,7 @@ static const int   ADAPTIVE_BLOCK   = 35;     // must be odd
 static const int   THRESHOLD_BIAS   = 6;      // below mean → dark bar
 static const int   CONFIRM_HITS     = 2;      // same code seen N times
 static const int   MAX_RUNS         = 1024;
-static const float TOLERANCE        = 1.2f;   // pattern match tolerance (units)
+static const float TOLERANCE        = 1.3f;   // pattern match tolerance (units)
 static const int   MIN_UNIT_PX      = 2;      // minimum bar width in pixels
 static const int   MAX_UNIT_PX      = 60;     // maximum bar width in pixels
 
@@ -285,24 +285,7 @@ static int extract_runs(
 // Use the start guard (3 equal bars) to calibrate
 
 static float estimate_unit(const int* runs, int n, int guard_idx) {
-    // Primary: average of 3 guard bars
-    float avg = (runs[guard_idx] + runs[guard_idx+1] + runs[guard_idx+2]) / 3.0f;
-
-    // Secondary: try to use full barcode width for better accuracy
-    // EAN-13 = 95 modules total, UPC-A = 95 modules
-    // Structure: 3 (start) + 42 (left 6 digits) + 5 (middle) + 42 (right 6 digits) + 3 (end)
-    // Count runs from guard to end guard if possible
-    int total_runs = 3 + 24 + 5 + 24 + 3; // = 59 runs for EAN-13
-    if (guard_idx + total_runs < n) {
-        int total_px = 0;
-        for (int i = guard_idx; i < guard_idx + total_runs; i++) {
-            total_px += runs[i];
-        }
-        float unit_from_total = total_px / 95.0f;
-        // Use weighted average of both estimates
-        return (avg * 0.4f) + (unit_from_total * 0.6f);
-    }
-    return avg;
+    return (runs[guard_idx] + runs[guard_idx+1] + runs[guard_idx+2]) / 3.0f;
 }
 
 // ── STEP 8: PATTERN MATCHING ─────────────────────────────────────────────────
@@ -321,7 +304,7 @@ static inline bool guard_ok(int a, int b, int c) {
     float avg = (a + b + c) / 3.0f;
     if (avg < MIN_UNIT_PX || avg > MAX_UNIT_PX) return false;
     float tol = 0.45f * avg;
-    return fabsf(a-avg)/avg < 0.35f && fabsf(b-avg)/avg < 0.35f && fabsf(c-avg)/avg < 0.35f;
+    return fabsf(a-avg)/avg < 0.45f && fabsf(b-avg)/avg < 0.45f && fabsf(c-avg)/avg < 0.45f;
 }
 
 // ── STEP 9: DIGIT DECODERS ───────────────────────────────────────────────────
@@ -391,14 +374,6 @@ static bool decode_ean(
         if (par) parity_mask |= (1 << (5-d));
         i += 4;
     }
-
-    // Verify left side total width is reasonable (6 digits x 7 units = 42)
-    int left_total = 0;
-    for (int d = g+3; d < g+3+24 && d < n; d++) {
-        left_total += runs[d];
-    }
-    float expected_left = unit * 42.0f;
-    if (fabsf((float)left_total - expected_left) / expected_left > 0.35f) return false;
 
     // Middle guard: 5 bars (light dark light dark light)
     if (i+4 >= n) return false;
@@ -503,7 +478,7 @@ static bool scan_row(
         bool is_dark = ((i % 2 == 0) == start_dark);
         if (!is_dark) continue;
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
-        float unit = estimate_unit(runs, n, i);
+        float unit = estimate_unit(runs, n, i); // n unused now but keeps signature
         // Reject if unit is too small (barcode too far away) or too large
         if (unit < 1.5f || unit > 80.0f) continue;
         if (decode_ean(runs, n, i, unit, out)) return true;
@@ -514,7 +489,7 @@ static bool scan_row(
         bool is_dark = ((i % 2 == 0) == start_dark);
         if (!is_dark) continue;
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
-        float unit = estimate_unit(runs, n, i);
+        float unit = estimate_unit(runs, n, i); // n unused now but keeps signature
         if (unit < 1.5f || unit > 80.0f) continue;
         if (decode_ean8(runs, n, i, unit, out)) return true;
     }
@@ -558,7 +533,7 @@ static bool scan_diagonal(
         bool is_dark = ((i%2==0) == start_dark);
         if (!is_dark) continue;
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
-        float unit = estimate_unit(runs, n, i);
+        float unit = estimate_unit(runs, n, i); // n unused now but keeps signature
         if (decode_ean(runs, n, i, unit, out)) return true;
     }
     return false;

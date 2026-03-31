@@ -485,7 +485,9 @@ static bool scan_row(
     }
 
     // Second pass: try EAN-8 only if no EAN-13/UPC-A found
-    for (int i = 0; i < n-30; i++) {
+    // Require at least 43 runs (EAN-8 minimum) AND fewer than 55 (would be UPC-A)
+    if (n >= 55) return false; // enough runs for UPC-A but first pass failed — skip EAN-8
+    for (int i = 0; i < n-43; i++) {
         bool is_dark = ((i % 2 == 0) == start_dark);
         if (!is_dark) continue;
         if (!guard_ok(runs[i], runs[i+1], runs[i+2])) continue;
